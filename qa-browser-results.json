@@ -1,0 +1,113 @@
+{
+  "viewport": {
+    "width": 1440,
+    "height": 980
+  },
+  "layout": [
+    {
+      "bodyOverflowX": false,
+      "bodyOverflowY": false,
+      "clippedBlocks": [],
+      "label": "活动",
+      "title": "活动"
+    },
+    {
+      "bodyOverflowX": false,
+      "bodyOverflowY": false,
+      "clippedBlocks": [],
+      "label": "概览",
+      "title": "概览"
+    },
+    {
+      "bodyOverflowX": false,
+      "bodyOverflowY": false,
+      "clippedBlocks": [],
+      "label": "进程",
+      "title": "进程"
+    },
+    {
+      "bodyOverflowX": false,
+      "bodyOverflowY": false,
+      "clippedBlocks": [],
+      "label": "设备",
+      "title": "设备"
+    },
+    {
+      "bodyOverflowX": false,
+      "bodyOverflowY": false,
+      "clippedBlocks": [],
+      "label": "策略",
+      "title": "代理配置"
+    },
+    {
+      "bodyOverflowX": false,
+      "bodyOverflowY": false,
+      "clippedBlocks": [],
+      "label": "规则",
+      "title": "规则"
+    },
+    {
+      "bodyOverflowX": false,
+      "bodyOverflowY": false,
+      "clippedBlocks": [],
+      "label": "捕获",
+      "title": "捕获"
+    },
+    {
+      "bodyOverflowX": false,
+      "bodyOverflowY": false,
+      "clippedBlocks": [],
+      "label": "解密",
+      "title": "HTTPS 解密"
+    },
+    {
+      "bodyOverflowX": false,
+      "bodyOverflowY": false,
+      "clippedBlocks": [],
+      "label": "重写",
+      "title": "重写 & 映射"
+    },
+    {
+      "bodyOverflowX": false,
+      "bodyOverflowY": false,
+      "clippedBlocks": [],
+      "label": "更多",
+      "title": "设置"
+    }
+  ],
+  "selectorSync": {
+    "activityValues": [
+      "Auto",
+      "hy2-VM-0-11-ubuntu"
+    ],
+    "policyState": {
+      "selectedCards": [
+        "hy2-VM-0-11-ubuntu",
+        "Auto"
+      ],
+      "visibleText": true
+    }
+  },
+  "captureToggle": [
+    "清空",
+    "重新载入",
+    "停止流量捕获",
+    "开启 MitM",
+    "代理控制"
+  ],
+  "rulesSearch": {
+    "query": "cursor",
+    "rowCount": 1,
+    "rows": [
+      "2DOMAIN-KEYWORDcursorProxy81"
+    ]
+  },
+  "processAndToggles": {
+    "beforeProcess": "Google Chrome",
+    "afterProcess": "xray",
+    "mitmBefore": "toggle ",
+    "mitmAfter": "toggle is-on",
+    "rewriteBefore": "toggle is-on",
+    "rewriteAfter": "toggle "
+  }
+}
