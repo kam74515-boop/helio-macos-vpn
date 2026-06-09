@@ -2,15 +2,14 @@ import { useState } from "react";
 import { Segmented, Icon } from "../components/ui";
 import { useTauriPoll } from "../hooks/tauri";
 import { canUseTauri } from "../utils/tauri";
-import { requests, processes } from "../data/mock";
 
 export function CapturePage() {
   const [tab, setTab] = useState("最近的请求");
   const [capturing, setCapturing] = useState(false);
-  const { data: realConns } = useTauriPoll("get_connections", null, 3000);
+  const { data: realConns, loading } = useTauriPoll("get_connections", null, 3000);
   const displayReqs = canUseTauri() && realConns?.length
     ? realConns.map((c, i) => [String(i + 1), c.timestamp, c.process, c.status, c.proxy, c.upload, c.download, c.duration, c.method, c.remote])
-    : requests;
+    : [];
   return (
     <div className="capture-window">
       <div className="capture-sidebar">
@@ -19,25 +18,27 @@ export function CapturePage() {
         <h3>请求</h3>
         <button className="side-chip active">所有客户端</button>
         <h3>本地程序 <Icon name="settings" /></h3>
-        {processes.slice(5).concat(processes.slice(0, 5)).map((item, index) => (
-          <button className="app-filter" key={`${item.app}-${index}`}>
-            <span className={`app-icon tone-${index % 6}`}><Icon name={item.icon} /></span>{item.app}
-          </button>
-        ))}
+        <div style={{ padding: "8px 0", color: "var(--muted)", fontSize: 12 }}>暂无筛选数据</div>
       </div>
       <main className="request-pane">
         <div className="request-tabs">
           <Segmented value={tab} options={["最近的请求", "活动连接", "DNS", "设备", "流量统计", "日志簿"]} onChange={setTab} />
           <label className="search compact-search"><Icon name="search" /><input placeholder="搜索" /></label>
         </div>
-        <div className="request-table">
-          <div className="thead"><span>ID</span><span>日期</span><span>客户端</span><span>状态</span><span>策略</span><span>上传</span><span>下载</span><span>时长</span><span>方法</span><span>地址</span></div>
-          {displayReqs.map((row) => (
-            <div className="tr" key={row[0]}>
-              {row.map((cell, index) => <span key={index}>{index === 0 && <i className="status-dot" />}{cell}</span>)}
-            </div>
-          ))}
-        </div>
+        {loading && <div style={{ padding: 24, color: "var(--muted)", textAlign: "center" }}>加载中...</div>}
+        {!loading && displayReqs.length === 0 && (
+          <div style={{ padding: 24, color: "var(--muted)", textAlign: "center" }}>暂无捕获数据</div>
+        )}
+        {displayReqs.length > 0 && (
+          <div className="request-table">
+            <div className="thead"><span>ID</span><span>日期</span><span>客户端</span><span>状态</span><span>策略</span><span>上传</span><span>下载</span><span>时长</span><span>方法</span><span>地址</span></div>
+            {displayReqs.map((row) => (
+              <div className="tr" key={row[0]}>
+                {row.map((cell, index) => <span key={index}>{index === 0 && <i className="status-dot" />}{cell}</span>)}
+              </div>
+            ))}
+          </div>
+        )}
         <div className="capture-actions">
           <button>清空</button>
           <button>重新载入</button>

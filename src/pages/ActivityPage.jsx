@@ -3,7 +3,6 @@ import { StatusPills, MetricCard, MiniLine, MenuSelect, Icon, ProcessRank, Segme
 import { useTauriPoll } from "../hooks/tauri";
 import { canUseTauri, safeInvoke } from "../utils/tauri";
 import { useToast } from "../components/Toast";
-import { policyGroups, nodes, trafficBars } from "../data/mock";
 
 export function ActivityPage({ systemProxy, enhanced, setSystemProxy, setEnhanced, selectedProxy, setSelectedProxy, selectedGroup, setSelectedGroup }) {
   const [scope, setScope] = useState("全部");
@@ -16,10 +15,10 @@ export function ActivityPage({ systemProxy, enhanced, setSystemProxy, setEnhance
     ? config.outbounds
       .filter((outbound) => !["direct", "block", "selector"].includes(outbound.outbound_type))
       .map((outbound) => outbound.tag)
-    : nodes.map((node) => node.name);
+    : [];
   const groupOptions = canUseTauri() && config
     ? ["Proxy"]
-    : policyGroups.map((group) => group.name);
+    : [];
 
   useEffect(() => {
     if (proxyOptions.length && !proxyOptions.includes(selectedProxy)) {
@@ -30,25 +29,25 @@ export function ActivityPage({ systemProxy, enhanced, setSystemProxy, setEnhance
     }
   }, [proxyOptions.join("|"), groupOptions.join("|"), selectedProxy, selectedGroup, setSelectedProxy, setSelectedGroup]);
 
-  const ssid = isReal ? snap.ssid : "Wi-Fi";
-  const externalIp = isReal ? snap.external_ip : "...";
-  const latencyMs = isReal ? snap.internet_latency_ms : 57;
-  const dnsMs = isReal ? snap.dns_latency_ms : 36;
-  const routerMs = isReal ? snap.router_latency_ms : 4;
-  const connectionsCount = isReal ? snap.connections_total : 73;
-  const processCount = isReal ? snap.processes_with_connections : 15;
-  const upKbps = isReal ? snap.upload_kbps : 11;
-  const downKbps = isReal ? snap.download_kbps : 47;
-  const totalDown = isReal ? Math.round(snap.total_download_mb) : 583;
-  const totalUp = isReal ? Math.round(snap.total_upload_mb) : 20.5;
-  const history = isReal && snap.traffic_history?.length ? snap.traffic_history : trafficBars;
+  const ssid = isReal ? snap.ssid : "--";
+  const externalIp = isReal ? snap.external_ip : "--";
+  const latencyMs = isReal ? snap.internet_latency_ms : null;
+  const dnsMs = isReal ? snap.dns_latency_ms : null;
+  const routerMs = isReal ? snap.router_latency_ms : null;
+  const connectionsCount = isReal ? snap.connections_total : 0;
+  const processCount = isReal ? snap.processes_with_connections : 0;
+  const upKbps = isReal ? snap.upload_kbps : 0;
+  const downKbps = isReal ? snap.download_kbps : 0;
+  const totalDown = isReal ? Math.round(snap.total_download_mb) : 0;
+  const totalUp = isReal ? Math.round(snap.total_upload_mb) : 0;
+  const history = isReal && snap.traffic_history?.length ? snap.traffic_history : [];
 
   const configName = config?.config_name || "Default";
   const modeLabel = config?.mode === "direct" ? "直接连接" : config?.mode === "global" ? "全局代理" : "规则判定";
 
   const displayProcs = canUseTauri() && realProcs?.length
     ? realProcs.map(p => ({ icon: p.icon_key, app: p.name, speed: `${p.connections} 连接`, total: `${((p.download_bytes + p.upload_bytes) / 1048576).toFixed(1)} MB` }))
-    : undefined;
+    : [];
 
   const handleSpeedTest = async () => {
     try {
@@ -86,18 +85,18 @@ export function ActivityPage({ systemProxy, enhanced, setSystemProxy, setEnhance
             <div><span className="card-label">INTERNET 延迟</span><Icon name="refresh" className="soft-icon" /></div>
             <button className="soft-button">网络诊断</button>
           </div>
-          <div className="latency-main">{loading ? "--" : Math.round(latencyMs)}<span>ms</span></div>
+          <div className="latency-main">{loading ? "--" : latencyMs != null ? Math.round(latencyMs) : "--"}<span>ms</span></div>
           <div className="latency-sub">
-            <div><span>路由</span><strong>{loading ? "--" : Math.round(routerMs)} ms</strong></div>
-            <div><span>DNS</span><strong>{loading ? "--" : Math.round(dnsMs)} ms</strong></div>
-            <div><span>代理节点</span><strong>{loading ? "--" : latencyMs ? `${Math.round(latencyMs)} ms` : "失败"}</strong></div>
+            <div><span>路由</span><strong>{loading ? "--" : routerMs != null ? `${Math.round(routerMs)} ms` : "--"}</strong></div>
+            <div><span>DNS</span><strong>{loading ? "--" : dnsMs != null ? `${Math.round(dnsMs)} ms` : "--"}</strong></div>
+            <div><span>代理节点</span><strong>{loading ? "--" : latencyMs != null ? `${Math.round(latencyMs)} ms` : "--"}</strong></div>
           </div>
         </section>
         <MetricCard label="上传" value={loading ? "--" : Math.round(upKbps)} unit="KB/s" accent="purple">
-          <MiniLine color="purple" values={history.map(v => v * 0.8)} />
+          <MiniLine color="purple" values={history.length ? history.map(v => v * 0.8) : [4,4,4,4,4,4,4,4]} />
         </MetricCard>
         <MetricCard label="下载" value={loading ? "--" : Math.round(downKbps)} unit="KB/s" accent="cyan">
-          <MiniLine color="cyan" values={history} />
+          <MiniLine color="cyan" values={history.length ? history : [4,4,4,4,4,4,4,4]} />
         </MetricCard>
         <section className="card connections">
           <span className="live-dot" />
@@ -115,11 +114,11 @@ export function ActivityPage({ systemProxy, enhanced, setSystemProxy, setEnhance
             <Segmented value={scope} options={["全部", "仅代理"]} onChange={setScope} />
           </div>
           <div className="bar-chart">
-            {history.map((value, index) => <span key={index} style={{ height: `${Math.min(value, 100)}%` }} />)}
+            {history.length ? history.map((value, index) => <span key={index} style={{ height: `${Math.min(value, 100)}%` }} />) : <span style={{ height: "4%" }} />}
           </div>
           <div className="time-axis"><span>12AM</span><span>6AM</span><span>12PM</span><span>6PM</span></div>
           <Segmented value="进程与设备" options={["进程与设备", "域名", "策略"]} onChange={() => {}} />
-          <ProcessRank compact items={displayProcs} />
+          <ProcessRank compact items={displayProcs.length ? displayProcs : undefined} />
         </section>
         <section className="card total">
           <div className="traffic-head">

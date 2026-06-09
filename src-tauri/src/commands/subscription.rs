@@ -24,7 +24,10 @@ pub async fn import_subscription(
     let raw = if looks_like_subscription_body(&url) {
         url
     } else {
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .build()
+            .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
         let resp = client
             .get(&url)
             .send()
@@ -67,7 +70,9 @@ pub async fn import_subscription(
 
 fn looks_like_subscription_body(input: &str) -> bool {
     let trimmed = input.trim();
-    trimmed.contains('\n') || supported_scheme(trimmed).is_some()
+    trimmed.contains('\n')
+        || supported_scheme(trimmed).is_some()
+        || decode_base64_text(trimmed).is_some_and(|decoded| decoded.lines().any(|line| supported_scheme(line.trim()).is_some()))
 }
 
 fn looks_like_yaml(input: &str) -> bool {

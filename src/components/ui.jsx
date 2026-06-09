@@ -3,7 +3,7 @@ import * as MuiIcons from "@mui/icons-material";
 import { iconMap, navGroups, processes } from "../data/mock";
 
 export function Icon({ name, className = "" }) {
-  const Component = iconMap[name] || MuiIcons.RadioButtonUncheckedRounded;
+  const Component = iconMap[name] || iconMap["memory"] || MuiIcons.MemoryRounded;
   return <Component className={`icon ${className}`} fontSize="inherit" aria-hidden="true" />;
 }
 

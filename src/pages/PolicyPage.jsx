@@ -3,7 +3,6 @@ import { Segmented, Icon } from "../components/ui";
 import { useTauriData } from "../hooks/tauri";
 import { canUseTauri, safeInvoke } from "../utils/tauri";
 import { useToast } from "../components/Toast";
-import { nodes, policyGroups } from "../data/mock";
 
 export function PolicyPage({ selectedProxy, setSelectedProxy, selectedGroup, setSelectedGroup }) {
   const [mode, setMode] = useState("全局代理");
@@ -25,10 +24,10 @@ export function PolicyPage({ selectedProxy, setSelectedProxy, selectedGroup, set
     ? config.outbounds
       .filter((o) => !["direct", "block", "selector"].includes(o.outbound_type))
       .map(o => ({ type: o.outbound_type, name: o.tag, ping: o.ping || "-", state: o.state || "ok" }))
-    : nodes;
+    : [];
   const displayGroups = isReal
     ? [{ name: "Proxy", mode: "手动选择策略组", members: displayNodes.length }]
-    : policyGroups;
+    : [];
 
   const handleModeChange = async (newMode) => {
     setMode(newMode);
@@ -93,6 +92,11 @@ export function PolicyPage({ selectedProxy, setSelectedProxy, selectedGroup, set
           <button className="ghost-button" onClick={handleSpeedTest} disabled={busy}>测试全部</button>
         </div>
       </div>
+      {displayNodes.length === 0 && (
+        <div className="empty-state" style={{ padding: "24px", textAlign: "center", color: "var(--muted)" }}>
+          <p>暂无节点，请导入订阅或手动添加节点</p>
+        </div>
+      )}
       <div className="node-grid">
         {displayNodes.map((node) => (
           <button className={`node-card ${selectedProxy === node.name ? "selected" : ""}`} key={node.name} onClick={() => setSelectedProxy(node.name)}>
@@ -101,7 +105,7 @@ export function PolicyPage({ selectedProxy, setSelectedProxy, selectedGroup, set
             <em className={node.state}>{node.ping}</em>
           </button>
         ))}
-        <button className="node-card add-card"><Icon name="add" /></button>
+        <button className="node-card add-card" onClick={handleImport}><Icon name="add" /></button>
       </div>
       <h2 className="section-title cyan">策略组</h2>
       <div className="node-grid group-row">
