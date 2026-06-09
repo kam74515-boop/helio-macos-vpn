@@ -380,6 +380,13 @@ fn build_tls(query: &BTreeMap<String, String>, reality_capable: bool) -> Value {
         }
         tls.insert("reality".to_string(), Value::Object(reality));
     }
+    // Add utls/fingerprint support (e.g. fp=chrome)
+    if let Some(fp) = query.get("fp").filter(|value| !value.is_empty()) {
+        let mut utls = Map::new();
+        utls.insert("enabled".to_string(), json!(true));
+        utls.insert("fingerprint".to_string(), json!(fp));
+        tls.insert("utls".to_string(), Value::Object(utls));
+    }
     Value::Object(tls)
 }
 
@@ -494,6 +501,44 @@ mod tests {
         assert_eq!(outbound["server"], "ss.example.com");
         assert_eq!(outbound["server_port"], 8388);
         assert_eq!(outbound["method"], "2022-blake3-aes-128-gcm");
+    }
+
+    #[test]
+    fn parses_vless_reality_uri_with_fp() {
+        let outbound = parse_proxy_uri(
+            "vless://123e4567-e89b-12d3-a456-426614174000@example.com:443?security=reality&sni=www.apple.com&pbk=abc&sid=12&fp=chrome&type=grpc&serviceName=edge#Reality%20Node",
+        )
+        .expect("valid vless");
+
+        assert_eq!(outbound["type"], "vless");
+        assert_eq!(outbound["tag"], "Reality Node");
+        assert_eq!(outbound["server"], "example.com");
+        assert_eq!(outbound["server_port"], 443);
+        assert_eq!(outbound["uuid"], "123e4567-e89b-12d3-a456-426614174000");
+        assert_eq!(outbound["tls"]["server_name"], "www.apple.com");
+        assert_eq!(outbound["tls"]["reality"]["enabled"], true);
+        assert_eq!(outbound["tls"]["utls"]["enabled"], true);
+        assert_eq!(outbound["tls"]["utls"]["fingerprint"], "chrome");
+        assert_eq!(outbound["transport"]["type"], "grpc");
+    }
+
+    #[test]
+    fn looks_like_subscription_body_for_plain_url() {
+        // The test URL should NOT be treated as a subscription body
+        let url = "https://user.vipservers202611.cc/s/tX80deST";
+        assert!(!looks_like_subscription_body(url), "plain URL should not look like subscription body");
+    }
+
+    #[test]
+    fn looks_like_subscription_body_for_base64_single_line() {
+        let body = BASE64_STANDARD.encode("vless://uuid@host:443?security=reality#Node");
+        assert!(looks_like_subscription_body(&body), "base64-encoded single URI should be recognized");
+    }
+
+    #[test]
+    fn looks_like_subscription_body_for_multi_line_uris() {
+        let body = "vless://uuid1@host1:443#Node1\nvless://uuid2@host2:443#Node2";
+        assert!(looks_like_subscription_body(body), "multi-line URIs should be recognized");
     }
 }
 

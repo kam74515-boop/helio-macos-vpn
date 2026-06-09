@@ -45,7 +45,7 @@ export function ProcessesPage() {
   const { data: realProcs, loading } = useTauriPoll("get_processes", null, 5000);
   const displayProcs = canUseTauri() && realProcs?.length
     ? realProcs.map(p => ({
-        icon: p.icon_base64 || p.icon_key,
+        icon: p.iconBase64 || p.icon_base64 || p.iconKey || p.icon_key,
         app: p.name,
         speed: `${p.connections} 连接`,
         total: `${((p.download_bytes + p.upload_bytes) / 1048576).toFixed(1)} MB`,

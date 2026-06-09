@@ -1,112 +1,58 @@
-# Helio MVP 继续开发计划
+# Helio 多问题修复计划
 
-## 目标
-完成 M1 阶段（可用 sidecar MVP）剩余核心功能，使 App 达到"可导入订阅、切换模式、测速、展示真实数据"的可用标准。
+## 问题清单
 
-## 当前基线
-- 仓库：`/Users/karl/apps/vpn/surge-material-prototype`
-- 分支：`main`（已提交 94c5955）
-- 前端：React 19 + Vite 6，10 个页面组件
-- 后端：Tauri 2 + Rust，模块化命令
-- 已具备：UI 原型、sidecar 启停、系统代理、订阅导入、基础配置生成
+1. **进程获取不全面** — 当前 process.rs 已改用 sysinfo 获取所有进程，但：
+   - `process.name()` 返回截断名（15字符），导致应用识别和图标匹配失败
+   - `get_app_icon_base64` 对每个进程单独调用 `lsof -p`，100个进程=100次外部命令，性能极差
+   - 系统进程过滤列表可能不够完善
 
-## Stage 1 — Rust 后端增强（并行）
+2. **活动页数据显示有问题** — ActivityPage.jsx：
+   - `displayProcs` 使用 `p.icon_key`，但 Tauri 序列化后字段名可能是 camelCase (`iconKey`)
+   - 未使用 `p.icon_base64`（或 `iconBase64`）显示真实图标
+   - `get_system_snapshot` 返回的数据可能不准确（traffic.rs 使用 `ipkts * 1500` 估算）
 
-### Worker A: 节点测速 + 代理模式切换
-**所有权**：`src-tauri/src/commands/network.rs`、`src-tauri/src/commands/singbox.rs`、`src-tauri/src/lib.rs`
+3. **无法导入订阅** — 需要验证 subscription.rs 的完整导入链路：
+   - `looks_like_subscription_body` 对 URL 的判断
+   - HTTP GET 请求和 base64 解码
+   - `parse_proxy_uri` 对各种协议的支持
+   - 前端调用方式
 
-#### 1.1 真实节点测速
-- 新增命令 `test_node_latency(node_tag: String, server: String, server_port: u16) -> SpeedTestResult`
-- 实现：通过 `std::net::TcpStream::connect_timeout` 测试节点端口连通性
-- 超时 3 秒，成功则记录耗时，失败则标记为超时
-- 修改 `run_speed_test`：读取当前 config 中的节点，对每个节点调用 `test_node_latency`
-- 修改 `run_speed_test_all`：测试所有非系统 outbound 节点
+4. **前端顶部白条** — tauri.conf.json `titleBarStyle: "Transparent"` + CSS `.is-tauri .sidebar { padding-top: 64px; }` 在隐藏 traffic-lights 后造成顶部空白
 
-#### 1.2 代理模式切换
-- 新增命令 `set_proxy_mode(mode: String) -> Result<(), String>`
-- mode 取值：`"direct"` | `"global"` | `"rule"`
-- 实现逻辑：
-  - `"direct"`：route.final = "direct"，auto_detect_interface = true，移除 selector 默认
-  - `"global"`：route.final = "Proxy"，auto_detect_interface = false
-  - `"rule"`：route.final = "Proxy"，auto_detect_interface = true
-- 修改配置后自动写入 config.json 并重启 sidecar
-- 新增命令 `get_proxy_mode() -> String`
+5. **窗口缩放后UI不正常** — CSS 中多处使用固定高度计算如 `height: calc(100vh - 14px * 2 - 20px - 210px)`，窗口缩小时布局崩坏
 
-### Worker B: 配置信息完善
-**所有权**：`src-tauri/src/commands/singbox.rs`、`src-tauri/src/types.rs`
+## 任务分配
 
-#### 1.3 配置元数据
-- `SingboxConfig` 新增字段：`config_name: String`（从文件路径或默认"Default"）
-- `get_singbox_config` 返回真实配置名和当前模式
+### Stage 1 — 并行修复（Agent 1 + Agent 2 同时执行）
 
-## Stage 2 — 前端增强（并行）
+**Agent 1: Rust后端修复专家**
+- 文件范围：`src-tauri/src/commands/process.rs`, `src-tauri/src/utils.rs`, `src-tauri/src/commands/subscription.rs`, `src-tauri/src/commands/network.rs`
+- 任务：
+  1. 优化进程获取：使用 `sysinfo` 的 `exe()` 获取真实路径，批量调用 `lsof` 获取所有进程路径（一次命令），避免每个进程单独调用
+  2. 修复 `get_app_icon_base64` 性能：批量获取路径，或改用 `sysinfo::Process::exe()`
+  3. 检查 `guess_icon` 对截断名称的匹配（如 "Google Chrome" 截断为 "Google" 或 "Chrome"）
+  4. 检查 subscription.rs 导入逻辑，确保 URL 订阅能正确下载、解码、解析
+  5. 检查 `get_system_snapshot` 数据准确性
 
-### Worker C: 错误处理 + Toast 系统
-**所有权**：`src/components/ui.jsx`、`src/App.jsx`、各页面文件
+**Agent 2: 前端UI修复专家**
+- 文件范围：`src/styles.css`, `src/pages/ActivityPage.jsx`, `src/pages/ProcessesPage.jsx`, `src-tauri/tauri.conf.json`
+- 任务：
+  1. 修复顶部白条：调整 `.is-tauri .sidebar` 的 padding-top，或调整 titleBarStyle
+  2. 修复窗口缩放响应式：将固定 height: calc(...) 改为 minmax/auto/flex 布局
+  3. 修复 ActivityPage 的 icon 映射：确认 Tauri 序列化字段名（icon_base64 vs iconBase64），统一使用真实图标
+  4. 检查 ProcessesPage 的 icon 映射一致性
 
-#### 2.1 Toast 通知系统
-- 新增 `ToastProvider` 和 `useToast` hook
-- 支持 success / error / info 三种类型
-- 自动 3 秒后消失
-- 替换所有 `alert()` 调用
+### Stage 2 — 整合验证
+- 主 Agent 合并所有修改
+- 执行 `cargo check` + `npm run build` + `npx tauri build`
+- 提交最终代码
 
-#### 2.2 活动页配置名真实显示
-- 从 `get_singbox_config` 读取 `config_name` 和 `mode`
-- 替换写死的 "Default" 和 "全局代理"
+## 关键上下文
 
-#### 2.3 代理配置页模式切换联动
-- 模式切换调用 `set_proxy_mode`
-- 切换后刷新配置并显示 toast
-
-### Worker D: 规则页 + 进程页完善
-**所有权**：`src/pages/RulesPage.jsx`、`src/pages/ProcessesPage.jsx`
-
-#### 2.4 规则页
-- 已接入真实数据，保持现状
-- 命中计数显示 "-"（MVP 占位）
-
-#### 2.5 进程页
-- 已接入真实数据，保持现状
-- 详情面板使用真实进程数据填充
-
-## Stage 3 — 整合与验证
-
-### 主代理执行
-1. 合并所有 worker 改动
-2. 运行 `cargo test`（订阅解析测试）
-3. 运行 `npm run build`
-4. 运行 `npx tauri build`
-5. Git 提交
-
-## 接口契约
-
-### 新增 Tauri 命令
-```rust
-// 节点测速
-test_node_latency(node_tag: String, server: String, server_port: u16) -> SpeedTestResult
-
-// 代理模式
-set_proxy_mode(mode: String) -> Result<(), String>
-get_proxy_mode() -> String
-```
-
-### 修改的数据结构
-```rust
-struct SingboxConfig {
-    mode: String,           // "direct" | "global" | "rule"
-    config_name: String,    // "Default" 或自定义名
-    outbounds: Vec<SingboxOutbound>,
-    rules: Vec<SingboxRule>,
-    policy_groups: Vec<serde_json::Value>,
-}
-```
-
-## 验证清单
-- [ ] `cargo test` 通过（订阅解析测试）
-- [ ] `npm run build` 通过
-- [ ] `npx tauri build` 通过
-- [ ] 导入订阅后节点列表真实展示
-- [ ] 节点测速返回真实延迟
-- [ ] 模式切换后配置正确写入
-- [ ] 活动页显示真实配置名和模式
-- [ ] Toast 替代所有 alert
+- 项目路径：`/Users/karl/apps/vpn/surge-material-prototype`
+- Tauri v2，Rust 1.96.0 刚安装
+- 前端：React 19 + Vite 6，单文件 CSS `src/styles.css`
+- 窗口配置：`titleBarStyle: "Transparent"`, `hiddenTitle: true`, `transparent: true`
+- 进程图标：后端新增 `icon_base64: Option<String>`，通过 `lsof -Fn` + `sips` 提取真实 macOS 图标
+- 订阅测试 URL：`https://user.vipservers202611.cc/s/tX80deST`（base64 编码的 vless Reality URI）

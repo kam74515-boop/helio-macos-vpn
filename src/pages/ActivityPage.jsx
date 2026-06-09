@@ -46,7 +46,7 @@ export function ActivityPage({ systemProxy, enhanced, setSystemProxy, setEnhance
   const modeLabel = config?.mode === "direct" ? "直接连接" : config?.mode === "global" ? "全局代理" : "规则判定";
 
   const displayProcs = canUseTauri() && realProcs?.length
-    ? realProcs.map(p => ({ icon: p.icon_key, app: p.name, speed: `${p.connections} 连接`, total: `${((p.download_bytes + p.upload_bytes) / 1048576).toFixed(1)} MB` }))
+    ? realProcs.map(p => ({ icon: p.iconBase64 || p.icon_base64 || p.iconKey || p.icon_key, app: p.name, speed: `${p.connections} 连接`, total: `${((p.download_bytes + p.upload_bytes) / 1048576).toFixed(1)} MB` }))
     : [];
 
   const handleSpeedTest = async () => {

@@ -28,13 +28,14 @@ pub async fn get_traffic_stats_impl(
         // Look for active Wi-Fi or primary interface
         if lower.contains("en0") || lower.contains("en1") {
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 7 {
-                // netstat -ib columns: Name Mtu Network Address Ipkts Ierrs Opkts Oerrs Coll
-                if let Ok(ipkts) = parts.get(4).unwrap_or(&"0").parse::<u64>() {
-                    rx_bytes = ipkts * 1500; // rough estimate: packets * MTU
+            if parts.len() >= 10 {
+                // netstat -ib columns: Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll
+                // Use actual byte counts (Ibytes index 6, Obytes index 9) instead of packet estimates
+                if let Ok(ibytes) = parts.get(6).unwrap_or(&"0").parse::<u64>() {
+                    rx_bytes = ibytes;
                 }
-                if let Ok(opkts) = parts.get(6).unwrap_or(&"0").parse::<u64>() {
-                    tx_bytes = opkts * 1500;
+                if let Ok(obytes) = parts.get(9).unwrap_or(&"0").parse::<u64>() {
+                    tx_bytes = obytes;
                 }
                 found_iface = true;
             }
