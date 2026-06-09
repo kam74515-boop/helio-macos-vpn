@@ -10,8 +10,8 @@ fn icon_cache() -> &'static Mutex<HashMap<String, Option<String>>> {
 
 /// Derive the .app bundle path and app name from an executable path.
 fn app_bundle_from_exe(exe_path: &str) -> Option<(String, String)> {
-    if exe_path.contains(".app/Contents/MacOS/") {
-        let app_path = exe_path.split(".app/Contents/MacOS/").next()
+    if exe_path.contains(".app/") {
+        let app_path = exe_path.split(".app/").next()
             .map(|p| format!("{}.app", p))?;
         let app_name = std::path::Path::new(&app_path)
             .file_stem()
@@ -23,9 +23,106 @@ fn app_bundle_from_exe(exe_path: &str) -> Option<(String, String)> {
     }
 }
 
+/// Scan /Applications and ~/Applications to build a name -> .app path cache.
+/// Uses mdfind (Spotlight) when available, falls back to find.
+fn scan_applications() -> HashMap<String, String> {
+    let mut apps: HashMap<String, String> = HashMap::new();
+
+    // Try mdfind first (fast, uses Spotlight index)
+    if let Ok(out) = run_cmd(&["mdfind", "kMDItemContentType == 'com.apple.application-bundle'"]) {
+        for line in out.lines() {
+            let path = line.trim();
+            if path.is_empty() { continue; }
+            if let Some(name) = std::path::Path::new(path).file_stem().and_then(|s| s.to_str()) {
+                apps.insert(name.to_lowercase(), path.to_string());
+                // Also insert without spaces for fuzzy matching
+                apps.insert(name.to_lowercase().replace(" ", ""), path.to_string());
+            }
+        }
+    }
+
+    // Fallback: find in /Applications and ~/Applications
+    for dir in ["/Applications", "~/Applications"] {
+        let expanded = if dir.starts_with("~/") {
+            if let Ok(home) = std::env::var("HOME") {
+                format!("{}{}", home, &dir[1..])
+            } else {
+                continue;
+            }
+        } else {
+            dir.to_string()
+        };
+        if let Ok(out) = run_cmd(&["find", &expanded, "-maxdepth", "2", "-name", "*.app", "-type", "d"]) {
+            for line in out.lines() {
+                let path = line.trim();
+                if path.is_empty() { continue; }
+                if let Some(name) = std::path::Path::new(path).file_stem().and_then(|s| s.to_str()) {
+                    let key = name.to_lowercase();
+                    if !apps.contains_key(&key) {
+                        apps.insert(key.clone(), path.to_string());
+                        apps.insert(key.replace(" ", ""), path.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    apps
+}
+
+static APP_SCAN_CACHE: std::sync::OnceLock<std::sync::Mutex<HashMap<String, String>>> = std::sync::OnceLock::new();
+
+fn app_scan_cache() -> &'static std::sync::Mutex<HashMap<String, String>> {
+    APP_SCAN_CACHE.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+/// Find an .app bundle by process name (fuzzy match).
+fn find_app_by_name(name: &str) -> Option<String> {
+    let lower = name.to_lowercase();
+    {
+        let cache = app_scan_cache().lock().unwrap();
+        // Exact match
+        if let Some(path) = cache.get(&lower) {
+            return Some(path.clone());
+        }
+        // Fuzzy: remove spaces and compare
+        let compact = lower.replace(" ", "");
+        if let Some(path) = cache.get(&compact) {
+            return Some(path.clone());
+        }
+        // Substring match
+        for (key, path) in cache.iter() {
+            if key.contains(&lower) || lower.contains(key.as_str()) {
+                return Some(path.clone());
+            }
+        }
+    }
+
+    // Cache miss: scan applications and retry
+    let scanned = scan_applications();
+    {
+        let mut cache = app_scan_cache().lock().unwrap();
+        cache.extend(scanned.clone());
+    }
+
+    if let Some(path) = scanned.get(&lower) {
+        return Some(path.clone());
+    }
+    let compact = lower.replace(" ", "");
+    if let Some(path) = scanned.get(&compact) {
+        return Some(path.clone());
+    }
+    for (key, path) in scanned.iter() {
+        if key.contains(&lower) || lower.contains(key.as_str()) {
+            return Some(path.clone());
+        }
+    }
+    None
+}
+
 /// Extract the real macOS app icon for a process and return it as a base64 PNG data URI.
 /// Uses the provided exe_path directly when available, avoiding per-process lsof calls.
-/// Falls back to lsof only when exe_path is not provided.
+/// Falls back to app name lookup in /Applications when exe_path is unavailable.
 pub fn get_app_icon_base64(pid: u32, name: &str, exe_path: Option<&str>) -> Option<String> {
     let cache_key = exe_path.and_then(|p| app_bundle_from_exe(p).map(|(_, n)| n))
         .unwrap_or_else(|| name.to_string());
@@ -46,7 +143,7 @@ pub fn get_app_icon_base64(pid: u32, name: &str, exe_path: Option<&str>) -> Opti
     result
 }
 
-fn get_app_icon_base64_impl(_pid: u32, _name: &str, exe_path: Option<&str>) -> Option<String> {
+fn get_app_icon_base64_impl(_pid: u32, name: &str, exe_path: Option<&str>) -> Option<String> {
     // 1. Get the executable path: use provided exe_path, or fall back to lsof
     let exe_path = exe_path.map(|p| p.to_string())
         .or_else(|| {
@@ -63,10 +160,15 @@ fn get_app_icon_base64_impl(_pid: u32, _name: &str, exe_path: Option<&str>) -> O
                 }
             }
             exe
-        })?;
+        });
 
     // 2. Derive .app bundle path from executable path
-    let (app_path, _app_name) = app_bundle_from_exe(&exe_path)?;
+    let app_path = exe_path.as_deref()
+        .and_then(app_bundle_from_exe)
+        .map(|(path, _)| path)
+        .or_else(|| find_app_by_name(name));
+
+    let app_path = app_path?;
 
     if !std::path::Path::new(&app_path).exists() {
         return None;
@@ -95,10 +197,11 @@ fn get_app_icon_base64_impl(_pid: u32, _name: &str, exe_path: Option<&str>) -> O
         return None;
     }
 
-    // 5. Convert to PNG (32px thumbnail) via sips
+    // 5. Convert to a Retina-friendly PNG thumbnail via sips.
+    // UI displays app icons at 24-42 CSS px; 128px prevents blur on 2x/3x screens.
     let tmp_path = format!("/tmp/helio_icon_{}.png", _pid);
     let sips_result = run_cmd(&[
-        "sips", "-Z", "32", "-s", "format", "png",
+        "sips", "-Z", "128", "-s", "format", "png",
         &icon_path, "--out", &tmp_path,
     ]);
     if sips_result.is_err() {

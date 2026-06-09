@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Manager, State};
 
 use crate::state::AppState;
+use crate::config_store::{ConfigStore, Profile, refresh_proxy_selector_in_profile};
 
 #[derive(Debug, Serialize, Clone)]
 pub struct ImportResult {
@@ -25,14 +26,14 @@ pub async fn import_subscription(
         url
     } else {
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(15))
+            .timeout(std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
         let resp = client
             .get(&url)
             .send()
             .await
-            .map_err(|e| format!("订阅请求失败: {}", e))?;
+            .map_err(|e| format!("订阅请求失败 (30s超时): {}", e))?;
 
         if !resp.status().is_success() {
             return Err(format!("订阅请求失败: HTTP {}", resp.status()));
@@ -53,18 +54,39 @@ pub async fn import_subscription(
         return Err("没有解析到可用节点。当前支持 vless、vmess、trojan、hysteria2/hy2、tuic、anytls、ss URI。".to_string());
     }
 
-    let new_config = build_singbox_config(&outbounds);
-    let config_dir = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("."));
-    fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
-    let config_path = config_dir.join("config.json");
-    fs::write(&config_path, &new_config).map_err(|e| e.to_string())?;
+    let store = app.state::<ConfigStore>();
+    let mut profile = store.get_active_profile().unwrap_or_else(|| {
+        let mut p = Profile::default();
+        p.name = "Default".to_string();
+        let _ = store.save_profile(&p);
+        let _ = store.set_active_profile("Default");
+        p
+    });
 
-    crate::commands::singbox::start_engine(app.clone(), state, Some(new_config)).await?;
+    // Count how many nodes were actually imported this time
+    let imported_count = outbounds.len();
+
+    // Add new outbounds to profile, dedup by tag
+    for ob in outbounds {
+        let tag = ob.get("tag").and_then(Value::as_str).unwrap_or("unknown").to_string();
+        profile.outbounds.retain(|item| item.get("tag").and_then(Value::as_str) != Some(&tag));
+        profile.outbounds.push(ob);
+    }
+
+    refresh_proxy_selector_in_profile(&mut profile)?;
+    store.save_profile(&profile)?;
+
+    let runtime = store.get_runtime_config(&profile);
+    let engine_result = crate::commands::singbox::start_engine(app.clone(), state, Some(runtime)).await;
+    let engine_message = match engine_result {
+        Ok(()) => "内核已重启".to_string(),
+        Err(e) => format!("配置已保存，但内核重启失败: {}", e),
+    };
 
     Ok(ImportResult {
         success: true,
-        message: "订阅导入成功，已生成 sing-box 配置并重启内核".to_string(),
-        imported_nodes: outbounds.len(),
+        message: format!("订阅导入成功，{} 个节点已写入。{}", imported_count, engine_message),
+        imported_nodes: imported_count,
     })
 }
 

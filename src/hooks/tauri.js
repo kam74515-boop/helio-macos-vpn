@@ -1,10 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { canUseTauri } from "../utils/tauri";
 
 export function useTauriPoll(command, args = null, interval = 3000, defaultValue = null) {
   const [data, setData] = useState(defaultValue);
   const [loading, setLoading] = useState(canUseTauri());
+  const [tick, setTick] = useState(0);
+
+  const refresh = useCallback(() => setTick((t) => t + 1), []);
+
   useEffect(() => {
     if (!canUseTauri()) { setLoading(false); return; }
     let active = true;
@@ -17,8 +21,8 @@ export function useTauriPoll(command, args = null, interval = 3000, defaultValue
     fetch();
     const timer = setInterval(fetch, interval);
     return () => { active = false; clearInterval(timer); };
-  }, [command, interval]);
-  return { data, loading };
+  }, [command, interval, tick, JSON.stringify(args)]);
+  return { data, loading, refresh };
 }
 
 export function useTauriData(command, defaultValue = null) {

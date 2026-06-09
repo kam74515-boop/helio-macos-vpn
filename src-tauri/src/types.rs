@@ -9,6 +9,10 @@ pub struct ProcessInfo {
     pub download_bytes: u64,
     pub icon_key: String,
     pub icon_base64: Option<String>,
+    pub policy: String,
+    pub last_address: String,
+    pub dns_resolver: String,
+    pub traffic_history: Vec<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -51,6 +55,7 @@ pub struct SingboxOutbound {
     pub server_port: u16,
     pub ping: String,
     pub state: String,
+    pub raw: serde_json::Value,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -69,6 +74,29 @@ pub struct SingboxConfig {
     pub outbounds: Vec<SingboxOutbound>,
     pub rules: Vec<SingboxRule>,
     pub policy_groups: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ManualOutboundInput {
+    pub tag: String,
+    pub outbound_type: String,
+    pub server: Option<String>,
+    pub server_port: Option<u16>,
+    pub uuid: Option<String>,
+    pub password: Option<String>,
+    pub method: Option<String>,
+    pub security: Option<String>,
+    pub sni: Option<String>,
+    pub raw_json: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectorGroupInput {
+    pub tag: String,
+    pub members: Vec<String>,
+    pub default: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

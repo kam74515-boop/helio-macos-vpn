@@ -2,26 +2,30 @@ use crate::types::ProxyState;
 use crate::utils::{run_cmd, run_cmd_stderr};
 
 pub async fn get_proxy_state_impl() -> Result<ProxyState, String> {
-    let service = primary_network_service();
-    let http = run_cmd_stderr(&["networksetup", "-getwebproxy", &service]).unwrap_or_default();
-    let socks = run_cmd_stderr(&["networksetup", "-getsocksfirewallproxy", &service]).unwrap_or_default();
+    tokio::task::spawn_blocking(|| {
+        let service = primary_network_service();
+        let http = run_cmd_stderr(&["networksetup", "-getwebproxy", &service]).unwrap_or_default();
+        let socks = run_cmd_stderr(&["networksetup", "-getsocksfirewallproxy", &service]).unwrap_or_default();
 
-    let http_enabled = http.contains("Enabled: Yes");
-    let socks_enabled = socks.contains("Enabled: Yes");
+        let http_enabled = http.contains("Enabled: Yes");
+        let socks_enabled = socks.contains("Enabled: Yes");
 
-    let http_host = extract_proxy_field(&http, "Server:");
-    let http_port = extract_proxy_field(&http, "Port:");
-    let socks_host = extract_proxy_field(&socks, "Server:");
-    let socks_port = extract_proxy_field(&socks, "Port:");
+        let http_host = extract_proxy_field(&http, "Server:");
+        let http_port = extract_proxy_field(&http, "Port:");
+        let socks_host = extract_proxy_field(&socks, "Server:");
+        let socks_port = extract_proxy_field(&socks, "Port:");
 
-    Ok(ProxyState {
-        system_proxy_enabled: http_enabled,
-        enhanced_mode: socks_enabled,
-        http_host,
-        http_port: if http_port.is_empty() { "6152".to_string() } else { http_port },
-        socks_host,
-        socks_port: if socks_port.is_empty() { "6152".to_string() } else { socks_port },
+        Ok(ProxyState {
+            system_proxy_enabled: http_enabled,
+            enhanced_mode: socks_enabled,
+            http_host,
+            http_port: if http_port.is_empty() { "6152".to_string() } else { http_port },
+            socks_host,
+            socks_port: if socks_port.is_empty() { "6152".to_string() } else { socks_port },
+        })
     })
+    .await
+    .map_err(|e| format!("获取代理状态失败: {}", e))?
 }
 
 pub fn primary_network_service() -> String {

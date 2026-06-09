@@ -341,3 +341,82 @@ pub async fn test_node_latency(
         }),
     }
 }
+
+#[derive(Debug, Serialize)]
+pub struct DiagnosticResult {
+    pub internet_reachable: bool,
+    pub dns_working: bool,
+    pub proxy_reachable: bool,
+    pub singbox_running: bool,
+    pub details: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn run_network_diagnostics() -> Result<DiagnosticResult, String> {
+    let mut details = Vec::new();
+
+    // 1. Check internet reachability (ping 8.8.8.8)
+    let internet_reachable = match run_cmd(&["ping", "-c", "1", "-W", "3", "8.8.8.8"]) {
+        Ok(out) if out.contains("1 packets received") || out.contains("1 received") => {
+            details.push("Internet: 可达 (8.8.8.8)".to_string());
+            true
+        }
+        _ => {
+            details.push("Internet: 不可达 (8.8.8.8 无响应)".to_string());
+            false
+        }
+    };
+
+    // 2. Check DNS (nslookup google.com)
+    let dns_working = match run_cmd(&["nslookup", "google.com"]) {
+        Ok(out) if out.contains("Address:") => {
+            details.push("DNS: 正常 (google.com 可解析)".to_string());
+            true
+        }
+        _ => {
+            details.push("DNS: 异常 (google.com 无法解析)".to_string());
+            false
+        }
+    };
+
+    // 3. Check if sing-box Clash API is reachable
+    let proxy_reachable = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+    {
+        Ok(client) => match client.get("http://127.0.0.1:9090").send().await {
+            Ok(resp) if resp.status().is_success() || resp.status().as_u16() == 404 => {
+                details.push("代理 API: 可达 (127.0.0.1:9090)".to_string());
+                true
+            }
+            _ => {
+                details.push("代理 API: 不可达 (127.0.0.1:9090 无响应，sing-box 可能未启动)".to_string());
+                false
+            }
+        },
+        _ => {
+            details.push("代理 API: 检查失败".to_string());
+            false
+        }
+    };
+
+    // 4. Check if sing-box process is running
+    let singbox_running = match run_cmd(&["pgrep", "-f", "sing-box"]) {
+        Ok(out) if !out.trim().is_empty() => {
+            details.push("sing-box 进程: 运行中".to_string());
+            true
+        }
+        _ => {
+            details.push("sing-box 进程: 未运行".to_string());
+            false
+        }
+    };
+
+    Ok(DiagnosticResult {
+        internet_reachable,
+        dns_working,
+        proxy_reachable,
+        singbox_running,
+        details,
+    })
+}

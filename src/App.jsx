@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { safeInvoke, canUseTauri } from "./utils/tauri";
 import { Sidebar } from "./components/ui";
-import { ToastProvider } from "./components/Toast";
+import { ToastProvider, useToast } from "./components/Toast";
 import { ActivityPage } from "./pages/ActivityPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ProcessesPage } from "./pages/ProcessesPage";
@@ -15,23 +15,38 @@ import { RewritePage } from "./pages/RewritePage";
 import { MorePage } from "./pages/MorePage";
 
 export function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
+  );
+}
+
+function AppContent() {
   const [active, setActive] = useState("activity");
   const [systemProxy, setSystemProxyState] = useState(false);
   const [enhanced, setEnhanced] = useState(false);
   const [selectedProxy, setSelectedProxy] = useState("tu5-VM-0-11-ubuntu");
   const [selectedGroup, setSelectedGroup] = useState("Proxy");
+  const { addToast } = useToast();
 
   const setSystemProxy = async (enable) => {
     try {
       if (enable) {
         await safeInvoke("start_engine", { config: null });
+        await safeInvoke("start_monitoring");
       }
       await safeInvoke("set_system_proxy", { enable });
+      if (!enable) {
+        await safeInvoke("stop_monitoring");
+        await safeInvoke("stop_engine");
+      }
       const state = await safeInvoke("get_proxy_state");
       setSystemProxyState(Boolean(state?.system_proxy_enabled));
     } catch (e) {
       console.error("Failed to set system proxy", e);
       setSystemProxyState(false);
+      addToast("代理设置失败: " + e, "error");
     }
   };
 
@@ -44,8 +59,9 @@ export function App() {
     safeInvoke("start_engine", { config: null }).catch(console.error);
     // Start background monitoring
     safeInvoke("start_monitoring").catch(console.error);
-    const unlisten = listen("traffic-update", (_event) => {
+    const unlisten = listen("traffic-update", (event) => {
       // Real-time traffic events supplement polling
+      console.log("Traffic update:", event.payload);
     }).catch(() => {});
     return () => {
       safeInvoke("stop_engine").catch(console.error);

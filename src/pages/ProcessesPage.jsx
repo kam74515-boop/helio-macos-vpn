@@ -8,16 +8,16 @@ export function ProcessDetail({ process }) {
     ["当前速度", process.speed || "--"],
     ["累计流量", process.total || "--"],
     ["活动连接", process.connections != null ? String(process.connections) : "--"],
-    ["命中策略", "--"],
-    ["最近地址", "--"],
-    ["DNS", "system-resolver"],
+    ["命中策略", process.policy || process.policy || "--"],
+    ["最近地址", process.lastAddress || process.last_address || "--"],
+    ["DNS", process.dnsResolver || process.dns_resolver || "system"],
   ];
   return (
     <aside className="detail-panel">
       <div className="detail-hero">
-        <span className="app-icon tone-1">
+        <span className={`app-icon ${typeof process.icon === "string" && process.icon.startsWith("data:") ? "real-icon" : "tone-1"}`}>
           {typeof process.icon === "string" && process.icon.startsWith("data:")
-            ? <img src={process.icon} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "inherit" }} />
+            ? <img src={process.icon} alt="" />
             : <Icon name={process.icon || "memory"} />}
         </span>
         <div>
@@ -34,7 +34,7 @@ export function ProcessDetail({ process }) {
         ))}
       </div>
       <div className="detail-chart">
-        <MiniLine color="cyan" values={[4, 5, 4, 6, 5, 4, 5, 4, 5, 6]} />
+        <MiniLine color="cyan" values={process.trafficHistory || process.traffic_history || []} />
       </div>
     </aside>
   );

@@ -26,5 +26,8 @@ tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
 sysinfo = "0.33"
 tokio = { version = "1", features = ["process", "time", "macros"] }
-reqwest = { version = "0.13.3", features = ["json"] }
+reqwest = { version = "0.13.3", features = ["json", "stream"] }
+urlencoding = "2"
 base64 = "0.22.1"
+rcgen = "0.13"
+x509-parser = "0.16"

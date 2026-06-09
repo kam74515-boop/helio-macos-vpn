@@ -157,9 +157,9 @@ export function ProcessRank({ compact = false, selectedApp = "", onSelect, items
           key={item.app}
           onClick={() => onSelect?.(item)}
         >
-          <span className={`app-icon tone-${index % 6}`}>
+          <span className={`app-icon ${typeof item.icon === "string" && item.icon.startsWith("data:") ? "real-icon" : `tone-${index % 6}`}`}>
             {typeof item.icon === "string" && item.icon.startsWith("data:")
-              ? <img src={item.icon} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "inherit" }} />
+              ? <img src={item.icon} alt="" />
               : <Icon name={item.icon} />}
           </span>
           <strong>{item.app}</strong>

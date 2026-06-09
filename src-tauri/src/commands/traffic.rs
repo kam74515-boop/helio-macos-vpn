@@ -67,7 +67,19 @@ pub async fn get_traffic_stats_impl(
     let mut snap = state.traffic_snapshot.lock().unwrap();
     let now = std::time::Instant::now();
     let elapsed = snap.prev_time.elapsed().as_secs_f64();
-    if elapsed < 0.1 { elapsed as f64; }
+    if elapsed < 0.1 {
+        // Interval too short: return zero speed to avoid division-by-near-zero
+        snap.prev_rx = total_rx;
+        snap.prev_tx = total_tx;
+        snap.prev_time = now;
+        return Ok(TrafficStats {
+            upload_kbps: 0.0,
+            download_kbps: 0.0,
+            total_upload_mb: (total_tx as f64 / 1024.0 / 1024.0 * 10.0).round() / 10.0,
+            total_download_mb: (total_rx as f64 / 1024.0 / 1024.0 * 10.0).round() / 10.0,
+            history: snap.history_rx.clone(),
+        });
+    }
 
     let upload_kbps = if snap.prev_tx > 0 && elapsed > 0.0 {
         ((total_tx.saturating_sub(snap.prev_tx)) as f64 / 1024.0 / elapsed).max(0.0)
