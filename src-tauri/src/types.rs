@@ -63,6 +63,7 @@ pub struct SingboxRule {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SingboxConfig {
+    pub config_name: String,
     pub mode: String,
     pub outbounds: Vec<SingboxOutbound>,
     pub rules: Vec<SingboxRule>,

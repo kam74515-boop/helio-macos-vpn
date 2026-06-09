@@ -6,6 +6,8 @@ use crate::state::AppState;
 use crate::commands::process::{get_processes_impl, get_connections_impl};
 use crate::commands::traffic::get_traffic_stats_impl;
 use crate::commands::proxy::get_proxy_state_impl;
+use std::net::TcpStream;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Serialize, Clone)]
 pub struct LatencyResult {
@@ -231,8 +233,27 @@ pub async fn get_network_info() -> Result<NetworkInfo, String> {
 }
 
 #[tauri::command]
-pub async fn run_speed_test(node_name: String) -> Result<SpeedTestResult, String> {
-    // Ping the node to measure latency
+pub async fn run_speed_test(app: AppHandle, node_name: String) -> Result<SpeedTestResult, String> {
+    // Try to find the node in current config and test its actual server:port
+    let config = crate::commands::singbox::get_singbox_config_json(app).await
+        .map_err(|e| format!("无法读取配置: {}", e))?;
+    
+    let outbounds = config.get("outbounds")
+        .and_then(|v| v.as_array());
+    
+    let empty: Vec<serde_json::Value> = vec![];
+    let outbounds = outbounds.unwrap_or(&empty);
+    
+    let node = outbounds.iter()
+        .find(|o| o.get("tag").and_then(|v| v.as_str()) == Some(&node_name));
+    
+    if let Some(node) = node {
+        let server = node.get("server").and_then(|v| v.as_str()).unwrap_or(&node_name);
+        let port = node.get("server_port").and_then(|v| v.as_u64()).unwrap_or(443) as u16;
+        return test_node_latency(node_name.clone(), server.to_string(), port).await;
+    }
+    
+    // Fallback: try to ping the node name as a hostname
     let out = run_cmd_stderr(&["ping", "-c", "2", "-t", "3", &node_name]).unwrap_or_default();
     let latency = parse_ping_avg(&out).unwrap_or(999.0);
     Ok(SpeedTestResult {
@@ -243,24 +264,80 @@ pub async fn run_speed_test(node_name: String) -> Result<SpeedTestResult, String
 }
 
 #[tauri::command]
-pub async fn run_speed_test_all() -> Result<Vec<SpeedTestResult>, String> {
-    // Test connectivity to common targets
-    let targets = vec![
-        ("谷歌 DNS", "8.8.8.8"),
-        ("Cloudflare DNS", "1.1.1.1"),
-        ("百度", "www.baidu.com"),
-        ("GitHub", "github.com"),
-    ];
-
+pub async fn run_speed_test_all(app: AppHandle) -> Result<Vec<SpeedTestResult>, String> {
+    let config = crate::commands::singbox::get_singbox_config_json(app).await
+        .map_err(|e| format!("无法读取配置: {}", e))?;
+    
+    let outbounds = config.get("outbounds")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    
     let mut results = Vec::new();
-    for (name, host) in &targets {
-        let out = run_cmd_stderr(&["ping", "-c", "2", "-t", "2", host]).unwrap_or_default();
-        let latency = parse_ping_avg(&out).unwrap_or(999.0);
-        results.push(SpeedTestResult {
-            node_name: name.to_string(),
-            latency_ms: latency,
-            success: latency < 500.0,
-        });
+    for ob in outbounds {
+        let tag = ob.get("tag").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let ob_type = ob.get("type").and_then(|v| v.as_str()).unwrap_or("direct");
+        
+        // Skip system outbounds
+        if ["direct", "block", "selector"].contains(&ob_type) {
+            continue;
+        }
+        
+        let server = ob.get("server").and_then(|v| v.as_str()).unwrap_or(tag);
+        let port = ob.get("server_port").and_then(|v| v.as_u64()).unwrap_or(443) as u16;
+        
+        let result = test_node_latency(tag.to_string(), server.to_string(), port).await?;
+        results.push(result);
     }
+    
+    if results.is_empty() {
+        // Fallback: test common targets
+        let targets = vec![
+            ("谷歌 DNS", "8.8.8.8", 53u16),
+            ("Cloudflare DNS", "1.1.1.1", 53u16),
+            ("百度", "www.baidu.com", 443u16),
+            ("GitHub", "github.com", 443u16),
+        ];
+        for (name, host, port) in targets {
+            let result = test_node_latency(name.to_string(), host.to_string(), port).await?;
+            results.push(result);
+        }
+    }
+    
     Ok(results)
+}
+
+#[tauri::command]
+pub async fn test_node_latency(
+    node_name: String,
+    server: String,
+    server_port: u16,
+) -> Result<SpeedTestResult, String> {
+    let addr = format!("{}:{}", server, server_port);
+    let start = Instant::now();
+    
+    let result = tokio::task::spawn_blocking(move || {
+        TcpStream::connect_timeout(
+            &addr.parse().map_err(|e| format!("地址解析失败: {}", e))?,
+            Duration::from_secs(3),
+        )
+        .map_err(|e| format!("连接失败: {}", e))
+    })
+    .await
+    .map_err(|e| format!("任务执行失败: {}", e))?;
+    
+    let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+    
+    match result {
+        Ok(_) => Ok(SpeedTestResult {
+            node_name,
+            latency_ms: elapsed,
+            success: true,
+        }),
+        Err(_) => Ok(SpeedTestResult {
+            node_name,
+            latency_ms: 999.0,
+            success: false,
+        }),
+    }
 }

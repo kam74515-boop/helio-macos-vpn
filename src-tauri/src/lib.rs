@@ -31,10 +31,14 @@ pub fn run() {
             commands::network::get_network_info,
             // sing-box config
             commands::singbox::get_singbox_config,
+            commands::singbox::get_singbox_config_json,
             commands::singbox::update_singbox_config,
+            commands::singbox::set_proxy_mode,
+            commands::singbox::get_proxy_mode,
             // Speed test
             commands::network::run_speed_test,
             commands::network::run_speed_test_all,
+            commands::network::test_node_latency,
             // Monitoring
             commands::singbox::start_monitoring,
             commands::singbox::stop_monitoring,

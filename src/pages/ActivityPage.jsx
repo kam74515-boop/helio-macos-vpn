@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { StatusPills, MetricCard, MiniLine, MenuSelect, Icon, ProcessRank, Segmented } from "../components/ui";
 import { useTauriPoll } from "../hooks/tauri";
 import { canUseTauri, safeInvoke } from "../utils/tauri";
+import { useToast } from "../components/Toast";
 import { policyGroups, nodes, trafficBars } from "../data/mock";
 
 export function ActivityPage({ systemProxy, enhanced, setSystemProxy, setEnhanced, selectedProxy, setSelectedProxy, selectedGroup, setSelectedGroup }) {
   const [scope, setScope] = useState("全部");
+  const { addToast } = useToast();
   const { data: snap, loading } = useTauriPoll("get_system_snapshot", null, 3000);
   const { data: realProcs } = useTauriPoll("get_processes", null, 5000);
   const { data: config } = useTauriPoll("get_singbox_config", null, 5000);
@@ -41,9 +43,25 @@ export function ActivityPage({ systemProxy, enhanced, setSystemProxy, setEnhance
   const totalUp = isReal ? Math.round(snap.total_upload_mb) : 20.5;
   const history = isReal && snap.traffic_history?.length ? snap.traffic_history : trafficBars;
 
+  const configName = config?.config_name || "Default";
+  const modeLabel = config?.mode === "direct" ? "直接连接" : config?.mode === "global" ? "全局代理" : "规则判定";
+
   const displayProcs = canUseTauri() && realProcs?.length
     ? realProcs.map(p => ({ icon: p.icon_key, app: p.name, speed: `${p.connections} 连接`, total: `${((p.download_bytes + p.upload_bytes) / 1048576).toFixed(1)} MB` }))
     : undefined;
+
+  const handleSpeedTest = async () => {
+    try {
+      addToast("开始测速...", "info");
+      const results = await safeInvoke("run_speed_test_all");
+      const summary = (results || [])
+        .map((item) => `${item.node_name}: ${Math.round(item.latency_ms)} ms`)
+        .join("\n");
+      addToast(summary || "没有可测速目标", "success");
+    } catch (e) {
+      addToast("测速失败: " + e, "error");
+    }
+  };
 
   return (
     <div className="page">
@@ -52,14 +70,14 @@ export function ActivityPage({ systemProxy, enhanced, setSystemProxy, setEnhance
         <h1>活动</h1>
         <div className="title-stats">
           <div><span>网络</span><strong>{ssid}</strong></div>
-          <div><span>配置</span><strong>Default</strong></div>
-          <div><span>出站模式</span><strong>全局代理</strong></div>
+          <div><span>配置</span><strong>{configName}</strong></div>
+          <div><span>出站模式</span><strong>{modeLabel}</strong></div>
           <div><span>外部 IP</span><strong>{externalIp}</strong></div>
         </div>
         <div className="activity-selectors">
           <MenuSelect label="策略组" value={selectedGroup} options={groupOptions} onChange={setSelectedGroup} />
           <MenuSelect label="代理" value={selectedProxy} options={proxyOptions.length ? proxyOptions : ["direct"]} onChange={setSelectedProxy} />
-          <button className="soft-button test-button" onClick={async () => { await safeInvoke("run_speed_test_all"); }}><Icon name="refresh" />测速</button>
+          <button className="soft-button test-button" onClick={handleSpeedTest}><Icon name="refresh" />测速</button>
         </div>
       </header>
       <div className="activity-grid">

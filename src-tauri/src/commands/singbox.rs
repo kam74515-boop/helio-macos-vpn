@@ -8,6 +8,20 @@ use crate::state::AppState;
 use crate::types::{SingboxConfig, SingboxOutbound, SingboxRule};
 
 #[tauri::command]
+pub async fn get_singbox_config_json(app: AppHandle) -> Result<serde_json::Value, String> {
+    let config_dir = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let config_path = config_dir.join("config.json");
+
+    let content = fs::read_to_string(&config_path)
+        .unwrap_or_else(|_| default_singbox_config());
+
+    let val: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("JSON 解析失败: {}", e))?;
+
+    Ok(val)
+}
+
+#[tauri::command]
 pub async fn get_singbox_config(app: AppHandle) -> Result<SingboxConfig, String> {
     let config_dir = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("."));
     let config_path = config_dir.join("config.json");
@@ -86,15 +100,89 @@ pub async fn get_singbox_config(app: AppHandle) -> Result<SingboxConfig, String>
         });
     }
 
-    let mode = if val["route"]["auto_detect_interface"].as_bool().unwrap_or(false) {
-        "规则判定"
-    } else {
-        "全局代理"
-    };
+    let mode = detect_mode(&val);
+    let config_name = val.get("_helio")
+        .and_then(|h| h.get("name"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("Default")
+        .to_string();
 
     let policy_groups: Vec<serde_json::Value> = Vec::new();
 
-    Ok(SingboxConfig { mode: mode.to_string(), outbounds, rules, policy_groups })
+    Ok(SingboxConfig { config_name, mode, outbounds, rules, policy_groups })
+}
+
+fn detect_mode(config: &serde_json::Value) -> String {
+    let route = config.get("route").and_then(|v| v.as_object());
+    let final_outbound = route
+        .and_then(|r| r.get("final"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("direct");
+    let auto_detect = route
+        .and_then(|r| r.get("auto_detect_interface"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    if final_outbound == "direct" {
+        "direct".to_string()
+    } else if !auto_detect {
+        "global".to_string()
+    } else {
+        "rule".to_string()
+    }
+}
+
+#[tauri::command]
+pub async fn set_proxy_mode(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    mode: String,
+) -> Result<(), String> {
+    let config_dir = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let config_path = config_dir.join("config.json");
+
+    let content = fs::read_to_string(&config_path)
+        .unwrap_or_else(|_| default_singbox_config());
+
+    let mut config: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("JSON 解析失败: {}", e))?;
+
+    // Ensure route object exists
+    if config.get("route").is_none() {
+        config["route"] = serde_json::json!({});
+    }
+
+    match mode.as_str() {
+        "direct" => {
+            config["route"]["final"] = serde_json::json!("direct");
+            config["route"]["auto_detect_interface"] = serde_json::json!(true);
+        }
+        "global" => {
+            config["route"]["final"] = serde_json::json!("Proxy");
+            config["route"]["auto_detect_interface"] = serde_json::json!(false);
+        }
+        "rule" => {
+            config["route"]["final"] = serde_json::json!("Proxy");
+            config["route"]["auto_detect_interface"] = serde_json::json!(true);
+        }
+        _ => return Err(format!("未知模式: {}", mode)),
+    }
+
+    // Write updated config
+    let updated = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("序列化失败: {}", e))?;
+    fs::write(&config_path, &updated).map_err(|e| e.to_string())?;
+
+    // Restart engine with new config
+    start_engine(app, state, Some(updated)).await?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_proxy_mode(app: AppHandle) -> Result<String, String> {
+    let config = get_singbox_config(app).await?;
+    Ok(config.mode)
 }
 
 pub fn default_singbox_config() -> String {

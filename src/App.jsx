@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { safeInvoke, canUseTauri } from "./utils/tauri";
 import { Sidebar } from "./components/ui";
+import { ToastProvider } from "./components/Toast";
 import { ActivityPage } from "./pages/ActivityPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ProcessesPage } from "./pages/ProcessesPage";
@@ -68,9 +69,11 @@ export function App() {
   };
 
   return (
-    <div className={`app-shell ${canUseTauri() ? "is-tauri" : "is-web"}`}>
-      <Sidebar active={active} onNavigate={setActive} />
-      <main className="content">{pages[active]}</main>
-    </div>
+    <ToastProvider>
+      <div className={`app-shell ${canUseTauri() ? "is-tauri" : "is-web"}`}>
+        <Sidebar active={active} onNavigate={setActive} />
+        <main className="content">{pages[active]}</main>
+      </div>
+    </ToastProvider>
   );
 }

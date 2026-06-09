@@ -116,6 +116,7 @@ fn build_singbox_config(nodes: &[Value]) -> String {
     outbounds.push(json!({"type": "direct", "tag": "direct"}));
 
     serde_json::to_string_pretty(&json!({
+        "_helio": {"name": "Imported", "version": "0.1.0"},
         "log": {"level": "info", "timestamp": true},
         "inbounds": [{
             "type": "mixed",
