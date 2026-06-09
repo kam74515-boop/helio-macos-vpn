@@ -15,7 +15,11 @@ export function ProcessDetail({ process }) {
   return (
     <aside className="detail-panel">
       <div className="detail-hero">
-        <span className="app-icon tone-1"><Icon name={process.icon || "memory"} /></span>
+        <span className="app-icon tone-1">
+          {typeof process.icon === "string" && process.icon.startsWith("data:")
+            ? <img src={process.icon} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "inherit" }} />
+            : <Icon name={process.icon || "memory"} />}
+        </span>
         <div>
           <h2>{process.app || "--"}</h2>
           <p>按进程查看实时连接、规则命中和流量统计。</p>
@@ -40,7 +44,13 @@ export function ProcessesPage() {
   const [metered, setMetered] = useState(false);
   const { data: realProcs, loading } = useTauriPoll("get_processes", null, 5000);
   const displayProcs = canUseTauri() && realProcs?.length
-    ? realProcs.map(p => ({ icon: p.icon_key, app: p.name, speed: `${p.connections} 连接`, total: `${((p.download_bytes + p.upload_bytes) / 1048576).toFixed(1)} MB`, connections: p.connections }))
+    ? realProcs.map(p => ({
+        icon: p.icon_base64 || p.icon_key,
+        app: p.name,
+        speed: `${p.connections} 连接`,
+        total: `${((p.download_bytes + p.upload_bytes) / 1048576).toFixed(1)} MB`,
+        connections: p.connections
+      }))
     : [];
   const [selectedProcess, setSelectedProcess] = useState(displayProcs[0] || { icon: "memory", app: "--", speed: "--", total: "--", connections: 0 });
   useEffect(() => { if (displayProcs?.length && !displayProcs.find(p => p.app === selectedProcess?.app)) setSelectedProcess(displayProcs[0]); }, [displayProcs]);

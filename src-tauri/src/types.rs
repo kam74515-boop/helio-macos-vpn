@@ -8,6 +8,7 @@ pub struct ProcessInfo {
     pub upload_bytes: u64,
     pub download_bytes: u64,
     pub icon_key: String,
+    pub icon_base64: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

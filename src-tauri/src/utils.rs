@@ -1,3 +1,106 @@
+use std::collections::HashMap;
+use std::sync::Mutex;
+use base64::prelude::*;
+
+static ICON_CACHE: std::sync::OnceLock<Mutex<HashMap<String, Option<String>>>> = std::sync::OnceLock::new();
+
+fn icon_cache() -> &'static Mutex<HashMap<String, Option<String>>> {
+    ICON_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Extract the real macOS app icon for a process and return it as a base64 PNG data URI.
+/// Uses lsof to find the executable path, then reads the .app bundle's .icns icon.
+pub fn get_app_icon_base64(pid: u32, name: &str) -> Option<String> {
+    let cache_key = name.to_string();
+    {
+        let cache = icon_cache().lock().unwrap();
+        if let Some(cached) = cache.get(&cache_key) {
+            return cached.clone();
+        }
+    }
+
+    let result = get_app_icon_base64_impl(pid, name);
+
+    {
+        let mut cache = icon_cache().lock().unwrap();
+        cache.insert(cache_key, result.clone());
+    }
+
+    result
+}
+
+fn get_app_icon_base64_impl(pid: u32, _name: &str) -> Option<String> {
+    // 1. Get the executable path via lsof
+    let lsof_out = run_cmd(&["lsof", "-p", &pid.to_string()]).ok()?;
+
+    let mut exe_path: Option<String> = None;
+    for line in lsof_out.lines() {
+        // lsof txt line: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+        if line.contains(" txt ") {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 9 {
+                exe_path = Some(parts[8].to_string());
+                break;
+            }
+        }
+    }
+
+    let exe_path = exe_path?;
+
+    // 2. Derive .app bundle path from executable path
+    // e.g. /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+    let app_path = if exe_path.contains(".app/Contents/MacOS/") {
+        exe_path.split(".app/Contents/MacOS/").next()
+            .map(|p| format!("{}.app", p))
+    } else {
+        None
+    }?;
+
+    if !std::path::Path::new(&app_path).exists() {
+        return None;
+    }
+
+    // 3. Read CFBundleIconFile from Info.plist
+    let info_plist = format!("{}/Contents/Info.plist", app_path);
+    if !std::path::Path::new(&info_plist).exists() {
+        return None;
+    }
+
+    let icon_name = run_cmd(&["defaults", "read", &info_plist, "CFBundleIconFile"]).ok()?;
+    let icon_name = icon_name.trim();
+    if icon_name.is_empty() {
+        return None;
+    }
+
+    // 4. Build full icon path (.icns in Resources)
+    let icon_path = if icon_name.ends_with(".icns") {
+        format!("{}/Contents/Resources/{}", app_path, icon_name)
+    } else {
+        format!("{}/Contents/Resources/{}.icns", app_path, icon_name)
+    };
+
+    if !std::path::Path::new(&icon_path).exists() {
+        return None;
+    }
+
+    // 5. Convert to PNG (32px thumbnail) via sips
+    let tmp_path = format!("/tmp/helio_icon_{}.png", pid);
+    let _ = run_cmd(&[
+        "sips", "-Z", "32", "-s", "format", "png",
+        &icon_path, "--out", &tmp_path,
+    ]);
+
+    // 6. Read PNG and base64-encode
+    let png_data = std::fs::read(&tmp_path).ok()?;
+    let _ = std::fs::remove_file(&tmp_path);
+
+    if png_data.is_empty() {
+        return None;
+    }
+
+    Some(format!("data:image/png;base64,{}", BASE64_STANDARD.encode(&png_data)))
+}
+
 pub fn run_cmd(args: &[&str]) -> Result<String, String> {
     let output = std::process::Command::new(args[0])
         .args(&args[1..])

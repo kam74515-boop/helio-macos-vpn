@@ -1,5 +1,5 @@
 use crate::types::{ProcessInfo, ConnectionInfo};
-use crate::utils::{run_cmd, guess_icon};
+use crate::utils::{run_cmd, guess_icon, get_app_icon_base64};
 use std::collections::HashMap;
 
 pub async fn get_processes_impl() -> Result<Vec<ProcessInfo>, String> {
@@ -52,6 +52,8 @@ pub async fn get_processes_impl() -> Result<Vec<ProcessInfo>, String> {
             .map(|p| (p.disk_usage().read_bytes / 1024, p.disk_usage().written_bytes / 1024))
             .unwrap_or((0, 0));
 
+        let icon_base64 = get_app_icon_base64(*pid, name);
+
         ProcessInfo {
             name: name.clone(),
             pid: *pid,
@@ -59,6 +61,7 @@ pub async fn get_processes_impl() -> Result<Vec<ProcessInfo>, String> {
             upload_bytes: tx,
             download_bytes: rx,
             icon_key: guess_icon(name).to_string(),
+            icon_base64,
         }
     })
     .collect();

@@ -157,7 +157,11 @@ export function ProcessRank({ compact = false, selectedApp = "", onSelect, items
           key={item.app}
           onClick={() => onSelect?.(item)}
         >
-          <span className={`app-icon tone-${index % 6}`}><Icon name={item.icon} /></span>
+          <span className={`app-icon tone-${index % 6}`}>
+            {typeof item.icon === "string" && item.icon.startsWith("data:")
+              ? <img src={item.icon} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "inherit" }} />
+              : <Icon name={item.icon} />}
+          </span>
           <strong>{item.app}</strong>
           <em>{compact ? ["276.4 MB", "187.8 MB", "41.9 MB", "41.3 MB", "24.8 MB"][index] : item.speed}</em>
           {!compact && <small>总计 {item.total}</small>}
