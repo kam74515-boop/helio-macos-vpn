@@ -156,4 +156,7 @@ export const iconMap = {
   security: MuiIcons.SecurityRounded,
   public: MuiIcons.PublicRounded,
   extension: MuiIcons.ExtensionRounded,
+  monitoring: MuiIcons.MonitorRounded,
+  vpn_lock: MuiIcons.VpnLockRounded,
+  api: MuiIcons.HttpRounded,
 };

@@ -496,3 +496,36 @@ mod tests {
         assert_eq!(outbound["method"], "2022-blake3-aes-128-gcm");
     }
 }
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+
+    #[test]
+    fn parses_real_subscription_vless_reality() {
+        let uri = "vless://2dd87e6b-3ace-41f3-bb2a-03d659ef3b60@as01.twzq59.cc:28988?mode=multi&encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.microsoft.com&fp=chrome&pbk=qhTzYYIgBzDLNYR79oxftqdo1kzL-1_hGJKfqrOliCY&type=vless&headerType=none#%E4%BA%9A%E6%B4%B204";
+        let outbound = parse_proxy_uri(uri).expect("valid vless");
+        
+        assert_eq!(outbound["type"], "vless");
+        assert_eq!(outbound["tag"], "亚洲04");
+        assert_eq!(outbound["server"], "as01.twzq59.cc");
+        assert_eq!(outbound["server_port"], 28988);
+        assert_eq!(outbound["uuid"], "2dd87e6b-3ace-41f3-bb2a-03d659ef3b60");
+        assert_eq!(outbound["flow"], "xtls-rprx-vision");
+        assert_eq!(outbound["tls"]["enabled"], true);
+        assert_eq!(outbound["tls"]["server_name"], "www.microsoft.com");
+        assert_eq!(outbound["tls"]["reality"]["enabled"], true);
+        assert_eq!(outbound["tls"]["reality"]["public_key"], "qhTzYYIgBzDLNYR79oxftqdo1kzL-1_hGJKfqrOliCY");
+    }
+
+    #[test]
+    fn parses_real_subscription_with_type_in_query() {
+        let uri = "vless://2dd87e6b-3ace-41f3-bb2a-03d659ef3b60@as01.twzq59.cc:55059?mode=multi&encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.douyin.com&fp=chrome&pbk=qhTzYYIgBzDLNYR79oxftqdo1kzL-1_hGJKfqrOliCY&type=vless&headerType=none#TestNode";
+        let outbound = parse_proxy_uri(uri).expect("valid vless");
+        
+        assert_eq!(outbound["type"], "vless");
+        assert_eq!(outbound["tag"], "TestNode");
+        // type=vless in query should not create a transport
+        assert!(outbound.get("transport").is_none());
+    }
+}

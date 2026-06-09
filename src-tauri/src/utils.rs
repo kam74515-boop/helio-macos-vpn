@@ -39,7 +39,7 @@ pub fn guess_icon(name: &str) -> &str {
     else if lower.contains("music") || lower.contains("音乐") || lower.contains("spotify") || lower.contains("netease") || lower.contains("qqmusic") { "music_note" }
     else if lower.contains("slack") { "chat" }
     else if lower.contains("discord") { "chat" }
-    else if lower.contains("zoom") || lower.contains("teams") || lower.contains("腾讯会议") || lower.contains(" Lark ") { "videocam" }
+    else if lower.contains("zoom") || lower.contains("teams") || lower.contains("腾讯会议") || lower.contains("lark") { "videocam" }
     else if lower.contains("telegram") || lower.contains("tg") { "send" }
     else if lower.contains("quark") || lower.contains("夸克") { "cloud" }
     else if lower.contains("notion") { "description" }
