@@ -1,46 +1,46 @@
-source visual truth path: user-provided Surge macOS screenshots in conversation
-implementation evidence paths:
+视觉真实来源路径：用户在对话中提供的 Surge macOS 截图
+实施证据路径：
 - /Users/karl/apps/vpn/surge-material-prototype/qa-browser-results.json
 - /Users/karl/apps/vpn/surge-material-prototype/qa-policy-page.png
-viewport: 1440 x 980
-state: all primary sidebar pages checked through the in-app Browser
+视口：1440 x 980
+状态：所有主要侧边栏页面已通过应用内浏览器检查
 
-full-view comparison evidence:
-- Activity, overview, processes, devices, proxy configuration, rules, capture, HTTPS decryption, rewrite, and settings pages were opened through the sidebar in the Web preview.
-- Browser QA reported no page-level horizontal overflow, no page-level vertical overflow, and no clipped visible content blocks on all ten primary pages.
-- Activity page keeps the Surge-like macOS sidebar, status pills, network summary, proxy/group selectors, metric cards, traffic chart, and traffic totals in one window.
-- Proxy page is now configuration-only: outbound mode, node configuration, and policy groups. Real-time traffic and connection monitoring stay on Activity/Capture.
-- Typography was reduced from oversized/heavy display styling to a lighter tool UI scale: nav 19px/700, H1 about 36px/800, body and controls mostly 14-18px/600-650.
+完整视图对比证据：
+- 通过 Web 预览中的侧边栏打开了活动、概览、进程、设备、代理配置、规则、捕获、HTTPS 解密、重写和设置页面。
+- 浏览器 QA 报告在所有十个主要页面上均无页面级水平溢出、无页面级垂直溢出、无可见内容块被裁剪。
+- 活动页面在一个窗口中保留了类似 Surge 的 macOS 侧边栏、状态标签、网络摘要、代理/策略组选择器、指标卡片、流量图表和流量总计。
+- 代理页面现仅作配置用途：出站模式、节点配置和策略组。实时流量和连接监控保留在活动/捕获页面。
+- 排版已从过大/过重的展示样式缩减为更轻量的工具 UI 级别：导航 19px/700，H1 约 36px/800，正文和控件大多为 14-18px/600-650。
 
-focused region comparison evidence:
-- Sidebar: selected state, icon alignment, grouped labels, and bottom actions checked on all pages.
-- Activity controls: policy group and proxy selectors are visible and sync with proxy configuration state.
-- Proxy configuration grid: all node and policy-group cards are visible in one window at 1440 x 980.
-- Process page: right-side detail panel updates when selecting a different process.
-- Rules page: search filters the table to the matching rule.
-- Capture page: capture button toggles from start to stop.
-- MITM and Rewrite pages: headline toggles change state.
+重点区域对比证据：
+- 侧边栏：在所有页面上检查了选中状态、图标对齐、分组标签和底部操作。
+- 活动控件：策略组和代理选择器可见且与代理配置状态同步。
+- 代理配置网格：在 1440 x 980 下一个窗口内可显示所有节点和策略组卡片。
+- 进程页面：选择不同进程时右侧详情面板更新。
+- 规则页面：搜索过滤表格以匹配规则。
+- 捕获页面：捕获按钮在启动和停止之间切换。
+- MITM 和重写页面：标题开关更改状态。
 
-findings:
-- No P0/P1/P2 issues remain for the requested prototype changes at the verified viewport.
+发现：
+- 在已验证的视口下，请求的原型更改不存在 P0/P1/P2 问题。
 
-patches made since previous QA pass:
-- Corrected the page class assignment so compact proxy styles apply to the proxy configuration page, not overview.
-- Added global selected proxy and selected policy group state.
-- Added activity-page policy group and proxy selectors.
-- Renamed the proxy surface to "代理配置" and kept it configuration-focused.
-- Reduced typography scale and font weight across navigation, titles, cards, controls, tables, and settings.
-- Compressed all primary pages to fit inside the current app window.
-- Added process and device detail panels so client pages are no longer empty placeholders.
-- Added structured browser QA evidence at qa-browser-results.json.
+自上次 QA 以来应用的补丁：
+- 修正了页面类分配，使紧凑代理样式应用于代理配置页面而非概览页面。
+- 添加了全局选中代理和选中策略组状态。
+- 添加了活动页面策略组和代理选择器。
+- 将代理界面重命名为"代理配置"并保持其专注于配置。
+- 缩减了导航、标题、卡片、控件、表格和设置中的排版级别和字重。
+- 压缩了所有主要页面以适应当前应用窗口。
+- 添加了进程和设备详情面板，使客户端页面不再是空占位。
+- 在 qa-browser-results.json 中添加了结构化浏览器 QA 证据。
 
-build and verification:
-- npm run build: passed.
-- Browser layout QA at 1440 x 980: passed for all ten primary pages.
-- Interaction QA: selector sync, rule search, capture toggle, process detail selection, MITM toggle, and rewrite toggle passed.
+构建与验证：
+- npm run build：通过。
+- 浏览器布局 QA（1440 x 980）：十个主要页面全部通过。
+- 交互 QA：选择器同步、规则搜索、捕获切换、进程详情选择、MITM 切换和重写切换全部通过。
 
-follow-up polish:
-- P3: capture screenshots intermittently timed out in the in-app browser runtime; structured browser evidence was saved instead.
-- P3: future SwiftUI implementation should replace MUI icons with SF Symbols or a local vector icon set.
+后续优化：
+- P3：应用内浏览器运行时截图偶尔超时；改为保存结构化浏览器证据。
+- P3：未来的 SwiftUI 实现应用 SF Symbols 或本地矢量图标集替换 MUI 图标。
 
-final result: passed
+最终结果：通过

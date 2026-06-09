@@ -1,7 +1,7 @@
 [package]
 name = "helio"
 version = "0.1.0"
-description = "A macOS proxy and VPN dashboard prototype inspired by Surge."
+description = "一个借鉴 Surge 架构的 macOS 代理与 VPN 仪表盘原型。"
 authors = ["kam74515-boop"]
 license = "MIT"
 repository = "https://github.com/kam74515-boop/helio-macos-vpn"
@@ -24,3 +24,5 @@ log = "0.4"
 tauri = { version = "2.11.2", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
+sysinfo = "0.33"
+tokio = { version = "1", features = ["process", "time", "macros"] }

@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import * as MuiIcons from "@mui/icons-material";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 const navGroups = [
   {
@@ -138,6 +139,37 @@ async function safeInvoke(command, args) {
   return invoke(command, args);
 }
 
+function useTauriPoll(command, args = null, interval = 3000, defaultValue = null) {
+  const [data, setData] = useState(defaultValue);
+  const [loading, setLoading] = useState(canUseTauri());
+  useEffect(() => {
+    if (!canUseTauri()) { setLoading(false); return; }
+    let active = true;
+    const fetch = async () => {
+      try {
+        const result = await invoke(command, args || {});
+        if (active) { setData(result); setLoading(false); }
+      } catch (e) { console.error(`${command}:`, e); if (active) setLoading(false); }
+    };
+    fetch();
+    const timer = setInterval(fetch, interval);
+    return () => { active = false; clearInterval(timer); };
+  }, [command, interval]);
+  return { data, loading };
+}
+
+function useTauriData(command, defaultValue = null) {
+  const [data, setData] = useState(defaultValue);
+  const [loading, setLoading] = useState(canUseTauri());
+  useEffect(() => {
+    if (!canUseTauri()) { setLoading(false); return; }
+    let active = true;
+    invoke(command).then(r => { if (active) { setData(r); setLoading(false); } }).catch(e => { console.error(e); if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [command]);
+  return { data, loading };
+}
+
 function Toggle({ checked, onChange }) {
   return (
     <button className={`toggle ${checked ? "is-on" : ""}`} onClick={() => onChange(!checked)} aria-label="toggle">
@@ -267,63 +299,64 @@ function MiniLine({ color = "blue", values = [40, 40, 35, 36, 62, 70, 38, 32, 52
 
 function ActivityPage({ systemProxy, enhanced, setSystemProxy, setEnhanced, selectedProxy, setSelectedProxy, selectedGroup, setSelectedGroup }) {
   const [scope, setScope] = useState("全部");
+  const { data: snap, loading } = useTauriPoll("get_system_snapshot", null, 3000);
+  const isReal = canUseTauri() && snap;
+
+  const ssid = isReal ? snap.ssid : "Wi-Fi";
+  const externalIp = isReal ? snap.external_ip : "...";
+  const latencyMs = isReal ? snap.internet_latency_ms : 57;
+  const dnsMs = isReal ? snap.dns_latency_ms : 36;
+  const routerMs = isReal ? snap.router_latency_ms : 4;
+  const connectionsCount = isReal ? snap.connections_total : 73;
+  const processCount = isReal ? snap.processes_with_connections : 15;
+  const upKbps = isReal ? snap.upload_kbps : 11;
+  const downKbps = isReal ? snap.download_kbps : 47;
+  const totalDown = isReal ? Math.round(snap.total_download_mb) : 583;
+  const totalUp = isReal ? Math.round(snap.total_upload_mb) : 20.5;
+  const history = isReal && snap.traffic_history?.length ? snap.traffic_history : trafficBars;
+
   return (
     <div className="page">
       <StatusPills systemProxy={systemProxy} enhanced={enhanced} setSystemProxy={setSystemProxy} setEnhanced={setEnhanced} />
       <header className="page-title">
         <h1>活动</h1>
         <div className="title-stats">
-          <div>
-            <span>网络</span>
-            <strong>Wi-Fi</strong>
-          </div>
-          <div>
-            <span>配置</span>
-            <strong>Default</strong>
-          </div>
-          <div>
-            <span>出站模式</span>
-            <strong>全局代理</strong>
-          </div>
-          <div>
-            <span>外部 IP</span>
-            <strong>...</strong>
-          </div>
+          <div><span>网络</span><strong>{ssid}</strong></div>
+          <div><span>配置</span><strong>Default</strong></div>
+          <div><span>出站模式</span><strong>全局代理</strong></div>
+          <div><span>外部 IP</span><strong>{externalIp}</strong></div>
         </div>
         <div className="activity-selectors">
           <MenuSelect label="策略组" value={selectedGroup} options={policyGroups.map((group) => group.name)} onChange={setSelectedGroup} />
           <MenuSelect label="代理" value={selectedProxy} options={nodes.map((node) => node.name)} onChange={setSelectedProxy} />
-          <button className="soft-button test-button"><Icon name="refresh" />测速</button>
+          <button className="soft-button test-button" onClick={async () => { await safeInvoke("run_speed_test_all"); }}><Icon name="refresh" />测速</button>
         </div>
       </header>
       <div className="activity-grid">
         <section className="card latency">
           <div className="card-toolbar">
-            <div>
-              <span className="card-label">INTERNET 延迟</span>
-              <Icon name="refresh" className="soft-icon" />
-            </div>
+            <div><span className="card-label">INTERNET 延迟</span><Icon name="refresh" className="soft-icon" /></div>
             <button className="soft-button">网络诊断</button>
           </div>
-          <div className="latency-main">57<span>ms</span></div>
+          <div className="latency-main">{loading ? "--" : Math.round(latencyMs)}<span>ms</span></div>
           <div className="latency-sub">
-            <div><span>路由</span><strong>4 ms</strong></div>
-            <div><span>DNS</span><strong>36 ms</strong></div>
-            <div><span>anytls-instance...</span><strong>失败</strong></div>
+            <div><span>路由</span><strong>{loading ? "--" : Math.round(routerMs)} ms</strong></div>
+            <div><span>DNS</span><strong>{loading ? "--" : Math.round(dnsMs)} ms</strong></div>
+            <div><span>代理节点</span><strong>{loading ? "--" : latencyMs ? `${Math.round(latencyMs)} ms` : "失败"}</strong></div>
           </div>
         </section>
-        <MetricCard label="上传" value="11" unit="KB/s" accent="purple">
-          <MiniLine color="purple" values={[38, 38, 33, 35, 70, 82, 40, 30, 55, 42]} />
+        <MetricCard label="上传" value={loading ? "--" : Math.round(upKbps)} unit="KB/s" accent="purple">
+          <MiniLine color="purple" values={history.map(v => v * 0.8)} />
         </MetricCard>
-        <MetricCard label="下载" value="47" unit="KB/s" accent="cyan">
-          <MiniLine color="cyan" values={[80, 40, 38, 35, 33, 36, 33, 65, 38, 44]} />
+        <MetricCard label="下载" value={loading ? "--" : Math.round(downKbps)} unit="KB/s" accent="cyan">
+          <MiniLine color="cyan" values={history} />
         </MetricCard>
         <section className="card connections">
           <span className="live-dot" />
           <div className="card-label">活动连接</div>
-          <div className="big-number">73</div>
+          <div className="big-number">{loading ? "--" : connectionsCount}</div>
           <div className="latency-sub">
-            <div><strong>15</strong><span>进程</span></div>
+            <div><strong>{loading ? "--" : processCount}</strong><span>进程</span></div>
             <div><strong>0</strong><span>设备</span></div>
             <div><strong>0</strong><span>DHCP 设备</span></div>
           </div>
@@ -334,7 +367,7 @@ function ActivityPage({ systemProxy, enhanced, setSystemProxy, setEnhanced, sele
             <Segmented value={scope} options={["全部", "仅代理"]} onChange={setScope} />
           </div>
           <div className="bar-chart">
-            {trafficBars.map((value, index) => <span key={index} style={{ height: `${value}%` }} />)}
+            {history.map((value, index) => <span key={index} style={{ height: `${Math.min(value, 100)}%` }} />)}
           </div>
           <div className="time-axis"><span>12AM</span><span>6AM</span><span>12PM</span><span>6PM</span></div>
           <Segmented value="进程与设备" options={["进程与设备", "域名", "策略"]} onChange={() => {}} />
@@ -345,8 +378,8 @@ function ActivityPage({ systemProxy, enhanced, setSystemProxy, setEnhanced, sele
             <span className="card-label">总计</span>
             <Segmented value="今日" options={["今日", "本月"]} onChange={() => {}} />
           </div>
-          <div className="total-main">603<span>MB</span></div>
-          <div className="usage-row"><span>DIRECT<br /><strong>583 MB</strong></span><span>代理<br /><strong>20.5 MB</strong></span></div>
+          <div className="total-main">{loading ? "--" : totalDown + totalUp}<span>MB</span></div>
+          <div className="usage-row"><span>DIRECT<br /><strong>{totalDown} MB</strong></span><span>代理<br /><strong>{totalUp} MB</strong></span></div>
           <div className="usage-bar"><span /><b /></div>
         </section>
       </div>
@@ -398,10 +431,11 @@ function OverviewCard({ title, text, status, checked, onChange, color }) {
   );
 }
 
-function ProcessRank({ compact = false, selectedApp = "", onSelect }) {
+function ProcessRank({ compact = false, selectedApp = "", onSelect, items }) {
+  const list = items || processes;
   return (
     <div className={`process-rank ${compact ? "compact" : ""}`}>
-      {processes.slice(0, compact ? 5 : processes.length).map((item, index) => (
+      {list.slice(0, compact ? 5 : list.length).map((item, index) => (
         <button
           className={`rank-row ${selectedApp === item.app ? "selected" : ""}`}
           key={item.app}
@@ -420,16 +454,19 @@ function ProcessRank({ compact = false, selectedApp = "", onSelect }) {
 
 function ProcessesPage() {
   const [metered, setMetered] = useState(false);
-  const [selectedProcess, setSelectedProcess] = useState(processes[1]);
+  const { data: realProcs } = useTauriPoll("get_processes", null, 5000);
+  const displayProcs = canUseTauri() && realProcs?.length
+    ? realProcs.map(p => ({ icon: p.icon_key, app: p.name, speed: `${p.connections} 连接`, total: `${((p.download_bytes + p.upload_bytes) / 1048576).toFixed(1)} MB` }))
+    : processes;
+  const [selectedProcess, setSelectedProcess] = useState(displayProcs[1]);
+  useEffect(() => { if (displayProcs?.length && !displayProcs.find(p => p.app === selectedProcess?.app)) setSelectedProcess(displayProcs[1]); }, [displayProcs]);
+
   return (
     <SplitPage title="进程" control="按流量排序">
       <div className="list-pane">
-        <ProcessRank selectedApp={selectedProcess.app} onSelect={setSelectedProcess} />
+        <ProcessRank selectedApp={selectedProcess.app} onSelect={setSelectedProcess} items={displayProcs} />
         <div className="metered-row">
-          <div>
-            <strong>计费网络模式</strong>
-            <p>启动后所有进程将默认禁止使用网络，适用于按流量计费的网络。</p>
-          </div>
+          <div><strong>计费网络模式</strong><p>启动后所有进程将默认禁止使用网络，适用于按流量计费的网络。</p></div>
           <Toggle checked={metered} onChange={setMetered} />
           <Icon name="settings" />
         </div>
@@ -525,6 +562,14 @@ function DeviceDetail({ gateway }) {
 
 function PolicyPage({ selectedProxy, setSelectedProxy, selectedGroup, setSelectedGroup }) {
   const [mode, setMode] = useState("全局代理");
+  const { data: config } = useTauriData("get_singbox_config");
+  const isReal = canUseTauri() && config;
+  const displayNodes = isReal && config.outbounds?.length
+    ? config.outbounds.map(o => ({ type: o.outbound_type, name: o.tag, ping: o.ping || "-", state: o.state || "ok" }))
+    : nodes;
+  const displayGroups = isReal && config.rules?.length
+    ? [{ name: "Proxy", mode: "手动选择策略组", members: config.outbounds?.length || 5 }]
+    : policyGroups;
   return (
     <div className="page airy policy-page">
       <h1>代理配置</h1>
@@ -535,7 +580,7 @@ function PolicyPage({ selectedProxy, setSelectedProxy, selectedGroup, setSelecte
         <button className="ghost-button">测试全部</button>
       </div>
       <div className="node-grid">
-        {nodes.map((node) => (
+        {displayNodes.map((node) => (
           <button className={`node-card ${selectedProxy === node.name ? "selected" : ""}`} key={node.name} onClick={() => setSelectedProxy(node.name)}>
             <span>{node.type}</span>
             <strong>{node.name}</strong>
@@ -546,7 +591,7 @@ function PolicyPage({ selectedProxy, setSelectedProxy, selectedGroup, setSelecte
       </div>
       <h2 className="section-title cyan">策略组</h2>
       <div className="node-grid group-row">
-        {policyGroups.slice(0, 3).map((group) => (
+        {displayGroups.slice(0, 3).map((group) => (
           <button className={`node-card ${selectedGroup === group.name ? "selected" : ""}`} key={group.name} onClick={() => setSelectedGroup(group.name)}>
             <span>{group.mode}</span>
             <strong>{group.name}</strong>
@@ -561,7 +606,12 @@ function PolicyPage({ selectedProxy, setSelectedProxy, selectedGroup, setSelecte
 
 function RulesPage() {
   const [query, setQuery] = useState("");
-  const visibleRules = useMemo(() => rules.filter((rule) => rule.join(" ").toLowerCase().includes(query.toLowerCase())), [query]);
+  const { data: config } = useTauriData("get_singbox_config");
+  const isReal = canUseTauri() && config;
+  const displayRules = isReal && config.rules?.length
+    ? config.rules.map(r => [r.id, r.rule_type, r.value, r.action, r.hits])
+    : rules;
+  const visibleRules = useMemo(() => displayRules.filter((rule) => rule.join(" ").toLowerCase().includes(query.toLowerCase())), [query, displayRules]);
   return (
     <div className="page card-shell rules-page">
       <div className="split-header">
@@ -589,6 +639,10 @@ function RulesPage() {
 function CapturePage() {
   const [tab, setTab] = useState("最近的请求");
   const [capturing, setCapturing] = useState(false);
+  const { data: realConns } = useTauriPoll("get_connections", null, 3000);
+  const displayReqs = canUseTauri() && realConns?.length
+    ? realConns.map((c, i) => [String(i + 1), c.timestamp, c.process, c.status, c.proxy, c.upload, c.download, c.duration, c.method, c.remote])
+    : requests;
   return (
     <div className="capture-window">
       <div className="capture-sidebar">
@@ -610,7 +664,7 @@ function CapturePage() {
         </div>
         <div className="request-table">
           <div className="thead"><span>ID</span><span>日期</span><span>客户端</span><span>状态</span><span>策略</span><span>上传</span><span>下载</span><span>时长</span><span>方法</span><span>地址</span></div>
-          {requests.map((row) => (
+          {displayReqs.map((row) => (
             <div className="tr" key={row[0]}>
               {row.map((cell, index) => <span key={index}>{index === 0 && <i className="status-dot" />}{cell}</span>)}
             </div>
@@ -731,14 +785,21 @@ export function App() {
 
   useEffect(() => {
     if (!canUseTauri()) return undefined;
-    // Basic valid sing-box config to test engine start
+    // Start sing-box engine
     const dummyConfig = JSON.stringify({
       log: { level: "info" },
       inbounds: [{ type: "mixed", tag: "mixed-in", listen: "127.0.0.1", listen_port: 6152 }]
     });
     safeInvoke("start_engine", { config: dummyConfig }).catch(console.error);
+    // Start background monitoring
+    safeInvoke("start_monitoring").catch(console.error);
+    const unlisten = listen("traffic-update", (_event) => {
+      // Real-time traffic events supplement polling
+    }).catch(() => {});
     return () => {
       safeInvoke("stop_engine").catch(console.error);
+      safeInvoke("stop_monitoring").catch(console.error);
+      unlisten.then?.(fn => fn()).catch(() => {});
     };
   }, []);
 
